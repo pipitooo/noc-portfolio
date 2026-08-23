@@ -1,0 +1,129 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+@import "./styles/design-tokens.css";
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/*
+ * Display-adaptive root font-size. Every token/utility in the app is
+ * rem-based, so scaling the root scales the entire NOC proportionally —
+ * fixed-px type was rendering tiny with dead margins on 2K+ panels.
+ */
+html {
+  font-size: 16px;
+}
+@media (min-width: 1760px) {
+  html {
+    font-size: 18px; /* 2K-class displays */
+  }
+}
+@media (min-width: 2300px) {
+  html {
+    font-size: 20px; /* native 2560px wide, unscaled OS */
+  }
+}
+@media (min-width: 3000px) {
+  html {
+    font-size: 22px; /* 4K / ultrawide */
+  }
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-void);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---- Desktop wallpaper: rack-unit grid + faint cyan wash ---- */
+.rack-grid {
+  background-color: var(--bg-base);
+  background-image:
+    radial-gradient(120% 80% at 50% 0%, rgba(45, 212, 191, 0.05), transparent 60%),
+    linear-gradient(to right, rgba(31, 40, 51, 0.4) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(31, 40, 51, 0.4) 1px, transparent 1px);
+  background-size: auto, 2rem 2rem, 2rem 2rem;
+}
+
+/* ---- Link-light flicker: amber flash -> cyan settle (120/180ms) ---- */
+@keyframes link-flicker {
+  0%,
+  44% {
+    border-color: var(--accent-amber);
+    color: var(--accent-amber);
+  }
+  54%,
+  100% {
+    border-color: var(--accent-cyan);
+    color: var(--accent-cyan);
+  }
+}
+
+.desk-icon:hover .icon-frame,
+.desk-icon:focus-visible .icon-frame {
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+  animation: link-flicker 300ms var(--ease-noc);
+}
+.desk-icon:hover .icon-label,
+.desk-icon:focus-visible .icon-label {
+  color: var(--text-primary);
+}
+
+/* ---- Terminal caret / hints ---- */
+@keyframes caret-blink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+.caret {
+  animation: caret-blink 1s steps(1) infinite;
+}
+.caret-blink-slow {
+  animation: caret-blink 2.2s steps(1) infinite;
+}
+
+/* ---- Status LED breathing ---- */
+@keyframes led-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+.led-breathe {
+  animation: led-breathe 2.4s ease-in-out infinite;
+}
+
+/* ---- Topology cable traffic flow ---- */
+@keyframes cable-flow {
+  to {
+    stroke-dashoffset: -48;
+  }
+}
+.link-flow {
+  animation: cable-flow 2.8s linear infinite;
+}

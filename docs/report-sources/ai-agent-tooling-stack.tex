@@ -1,0 +1,146 @@
+% AI & Agent Tooling Stack — project report (generated documentation)
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.4cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage[hidelinks]{hyperref}
+\usepackage{listings}
+\usepackage{graphicx}
+\usepackage{float} % Added to force exact image placement
+
+\definecolor{noc}{HTML}{0F766E}
+\definecolor{nocdark}{HTML}{134E4A}
+
+\titleformat{\section}{\large\bfseries\color{nocdark}}{\thesection}{0.8em}{}
+\titleformat{\subsection}{\normalsize\bfseries\color{noc}}{\thesubsection}{0.8em}{}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  rulecolor=\color{noc},
+  backgroundcolor=\color[HTML]{F0FDFA},
+}
+
+\begin{document}
+
+\begin{center}
+  {\LARGE\bfseries AI \& Agent Tooling Stack}\\[4pt]
+  {\large Local Model Hosting, LLM Routing, Browser Automation, Multi-Agent Orchestration}\\[8pt]
+  {\color{noc}\rule{\textwidth}{1pt}}\\[6pt]
+  {\small Marouane Aabirrouche --- IT Infrastructure specialist --- R\'eseaux \& Syst\`emes}\\
+  {\small Project write-up PRJ-07 \,\textbullet\, work in progress --- living documentation}
+\end{center}
+
+\section*{Status note}
+This node groups four small, individually undocumented projects into one
+infrastructure-and-orchestration story: \emph{the tooling layer behind how I
+build}. It is deliberately presented as in-progress rather than a finished,
+shipped product.
+
+\section{Overview}
+Rather than treating AI tooling as a set of demos, this stack treats it as an
+infrastructure problem: models are workloads with hardware constraints, requests
+need a routing layer with policy, browsers become automatable endpoints, and
+complex tasks decompose into agent teams with explicit delegation rules.
+
+\section{Local AI hosting and quantization}
+Consumer hardware sets real constraints: an 8\,GB VRAM budget (RTX~2060 Super)
+with 32\,GB of system RAM. The work here is making useful models fit that box:
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{unsloth.png}
+  \caption{Unsloth interface hosting local quantized models.}
+\end{figure}
+
+\begin{itemize}[leftmargin=1.6em]
+  \item Running \textbf{quantized} and smaller model variants so weights fit in
+        VRAM while activations spill gracefully to system RAM.
+  \item Evaluating \textbf{Mixture-of-Experts} architectures, whose sparse
+        activation makes them unusually friendly to tight memory budgets ---
+        explored via \textbf{llama.cpp}, \textbf{ExLlamaV2}/TabbyAPI, and
+        \textbf{Ollama}, each with different trade-offs in speed, memory layout
+        and serving ergonomics.
+\end{itemize}
+
+\section{OmniRoute --- self-hosted LLM routing layer}
+OmniRoute is the piece that turns local inference into infrastructure. It runs
+locally on \texttt{localhost:20128} and exposes an \textbf{OpenAI-compatible
+API}, so any client that can talk to OpenAI can talk to the whole local fleet
+without knowing what is behind it.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{home_omni.png}
+  \caption{OmniRoute Provider Topology mapping connected backends.}
+\end{figure}
+
+Requests are routed across named model pools, each tuned for a job family:
+
+\begin{lstlisting}
+planning   coding   review/security   vision   cheap
+\end{lstlisting}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{omni_combo.png}
+  \caption{OmniRoute Combos establishing priority routing for different tasks.}
+\end{figure}
+
+The routing layer keeps callers decoupled from specific models: a pool can gain,
+lose or swap backends without touching client code --- the same abstraction
+discipline used for services behind a load balancer in classical infrastructure.
+
+\section{Browser automation}
+Web-based workflows were evaluated and operationalized with browser-driving
+tools --- \textbf{Playwright MCP} and \textbf{Browser Use} --- giving agents
+reliable hands on real pages: navigation, extraction, form flows and end-to-end
+verification steps inside AI-assisted development loops.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{playwrit.png}
+  \caption{MCP server configuration file integrating Playwright into the local environment.}
+\end{figure}
+
+\section{CrewAI multi-agent framework}
+The orchestration layer is a hierarchical multi-agent system built on
+\textbf{CrewAI}: \textbf{ten specialist agents} under a \textbf{custom manager
+agent} with strict delegation-only behavior. The manager never does specialist
+work itself; it decomposes objectives, assigns them, and integrates results.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{crew_ai.jpg}
+  \caption{CrewAI multi-agent topology showing the Manager Agent delegating tasks to 10 specialists.}
+\end{figure}
+
+Model access flows through OmniRoute, so each role draws on the pool that fits
+its task --- heavy reasoning for planning, cheap fast models for routine steps.
+
+\section{Why it matters}
+\begin{itemize}[leftmargin=1.6em]
+  \item Treats AI capability as capacity planning under hardware constraints,
+        not magic.
+  \item A routing layer with named pools is the difference between a pile of
+        models and an operable platform.
+  \item Delegation-only managers encode accountability into agent systems ---
+        clear ownership of every subtask.
+\end{itemize}
+
+\section{Next steps}
+Documentation is intentionally thin today; planned follow-ups include publishing
+configuration notes for OmniRoute's pool definitions, quantization benchmarks
+against the 8\,GB VRAM budget, and a write-up of the CrewAI delegation patterns.
+
+\vfill
+\begin{center}
+  {\small\color{noc}\rule{0.5\textwidth}{0.6pt}}\\[4pt]
+  {\footnotesize Generated documentation --- NOC portfolio, PRJ-07. In progress; details evolve.}\\
+  {\footnotesize Bouznika, Morocco \,\textbullet\, \today}
+\end{center}
+
+\end{document}
